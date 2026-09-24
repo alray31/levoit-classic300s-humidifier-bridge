@@ -1,7 +1,7 @@
 {
   "domain": "levoit_humidifier_bridge",
   "name": "Levoit Classic 300S Humidifier Card",
-  "version": "2.0.0",
+  "version": "0.0.1",
   "documentation": "https://github.com/alray31/levoit-classic300s-humidifier-bridge",
   "issue_tracker": "https://github.com/alray31/levoit-classic300s-humidifier-bridge/issues",
   "codeowners": ["@alray31"],
