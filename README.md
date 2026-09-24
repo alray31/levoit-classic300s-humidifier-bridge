@@ -9,14 +9,15 @@ Manual level, and a `switch` for power) into a single native
 with a power toggle, an Auto/Sleep/Manual mode dropdown, and a target
 dial, instead of several separate entities.
 
+Set up entirely through the UI (Settings -> Devices & services -> Add
+integration) -- no YAML to edit. The setup form auto-detects your
+device's entities and pre-fills them; you just confirm.
+
 It does **not** talk to the appliance directly. It has no idea the
 device is a humidifier, a UART protocol, or anything hardware-specific
 -- it just relays `switch.turn_on/turn_off`, `select.select_option`, and
 `number.set_value` calls to entities that already exist, and mirrors
-their state back. You could point this at a different set of
-select/number/switch entities entirely and it would work the same way,
-though it was built specifically to pair with the [ESPHome firmware
-repo](https://github.com/alray31/levoit-classic300s-esphome) above.
+their state back.
 
 ## Why this exists instead of a plain `template:` humidifier
 
@@ -34,12 +35,15 @@ Hygrostat](https://www.home-assistant.io/integrations/generic_hygrostat/),
 is a poor fit here: it makes its own on/off decisions from a humidity
 sensor using its own hysteresis logic, which would fight with the
 Auto/Sleep humidity-band control already running on the appliance's own
-MCU. Same problem with repurposing something like [Versatile
-Thermostat](https://github.com/jmcollin78/versatile_thermostat) -- it's
-a `climate`-domain integration built around thermal inertia (TPI
-algorithm) for heating/cooling, with no concept of humidity, and it also
-wants to own the control decision itself rather than just exposing modes
-a device already has.
+MCU.
+
+There's also a third-party HACS integration,
+[tsunglung/hass_humidifier_template](https://github.com/tsunglung/hass_humidifier_template),
+which is a genuine templated humidifier platform -- but its
+`min_humidity`/`max_humidity` are fixed at setup time (static config
+values, not templates), so it can't give Manual mode its own 1-9 dial
+range the way this integration does; you'd be stuck with one fixed
+range across all three modes.
 
 This integration doesn't try to regulate anything -- it's a thin,
 honest relay. The appliance keeps doing its own thing; Home Assistant
@@ -51,7 +55,7 @@ just gets a proper `humidifier` entity to show and control it with.
 
 1. HACS -> the 3-dot menu (top right) -> **Custom repositories**.
 2. Add this repository's URL, category **Integration**.
-3. Find "Levoit Classic 300S Humidifier Bridge" in HACS and install it.
+3. Find "Levoit Classic 300S Humidifier Card" in HACS and install it.
 4. Restart Home Assistant.
 
 ### Manually
@@ -62,51 +66,49 @@ just gets a proper `humidifier` entity to show and control it with.
 
 ## Configuration
 
-Find your device's real entity IDs first: **Settings -> Devices &
-services -> Devices -> Levoit Classic 300S** (or whatever you named it
-under `esphome: name:`) -> its Entities tab. You're looking for:
+No YAML. After restarting:
 
-- `switch.xxx_power`
-- `select.xxx_mode`
-- `number.xxx_auto_target_humidity`
-- `number.xxx_sleep_target_humidity`
-- `number.xxx_manual_mist_level`
-- `sensor.xxx_current_humidity` (optional, shows current humidity on the card)
+1. **Settings -> Devices & services -> Add integration**.
+2. Search for **"Levoit Classic 300S Humidifier Card"**.
+3. A form appears. If you haven't renamed any of the ESPHome entities,
+   every field is already filled in -- just hit **Submit**.
 
-Then add this to `configuration.yaml` (or a package), with your real
-entity IDs substituted in:
+### How the auto-detection works
 
-```yaml
-humidifier:
-  - platform: levoit_humidifier_bridge
-    name: "Levoit Classic 300S"
-    power_switch: switch.xxx_power
-    mode_select: select.xxx_mode
-    auto_target: number.xxx_auto_target_humidity
-    sleep_target: number.xxx_sleep_target_humidity
-    manual_level: number.xxx_manual_mist_level
-    current_humidity: sensor.xxx_current_humidity
-```
+The form first looks for the one `select` entity anywhere in Home
+Assistant whose `options` are exactly `auto`/`manual`/`sleep` -- that's
+distinctive enough to reliably find the right device even if you have
+several ESPHome devices. From there, it looks at every other entity on
+that same device and matches them by their default friendly name from
+`common_entities.yaml`: "Power", "Auto Target Humidity", "Sleep Target
+Humidity", "Manual Mist Level", "Current Humidity".
 
-Restart Home Assistant. The new `humidifier.levoit_classic_300s` entity
-appears -- add it to a dashboard and Lovelace gives it the standard
-humidifier card automatically.
+Every field on the form is still a normal entity picker/dropdown,
+though -- so if a guess is missing or wrong (you renamed something, or
+have an unusual setup), just pick the right entity yourself. Nothing is
+hardcoded or required to match exactly.
+
+To bridge more than one Classic 300S, just run "Add integration" again
+-- each one becomes its own config entry.
 
 ## What it does, and doesn't, do
 
-- **On/Off** is the card's power toggle, wired to `power_switch`. Off is
-  not one of the modes below -- it's the entity's own on/off state,
-  exactly like every other `humidifier` entity works.
-- **Mode** (Auto / Sleep / Manual) is wired to `mode_select`.
+- **On/Off** is the card's power toggle, wired to the Power switch you
+  picked. Off is not one of the modes below -- it's the entity's own
+  on/off state, exactly like every other `humidifier` entity works.
+- **Mode** (Auto / Sleep / Manual) is wired to the mode select you
+  picked.
 - **Target dial** depends on the currently active mode:
-  - Auto -> reads/writes `auto_target` (30-80%, a real humidity target)
-  - Sleep -> reads/writes `sleep_target` (30-80%, a real humidity target)
-  - Manual -> reads/writes `manual_level` (1-9, a mist *level*, not a
-    real humidity percentage)
+  - Auto -> reads/writes Auto Target Humidity (30-80%, a real humidity
+    target)
+  - Sleep -> reads/writes Sleep Target Humidity (30-80%, a real
+    humidity target)
+  - Manual -> reads/writes Manual Mist Level (1-9, a mist *level*, not
+    a real humidity percentage)
 - **In Manual mode the dial genuinely runs 1-9** instead of being stuck
-  on a 30-80% scale that wouldn't make sense there. One caveat: Lovelace's
-  humidifier card always labels this dial with "%" no matter what
-  min/max are set to -- that's hardcoded in the HA frontend, not
+  on a 30-80% scale that wouldn't make sense there. One caveat:
+  Lovelace's humidifier card always labels this dial with "%" no matter
+  what min/max are set to -- that's hardcoded in the HA frontend, not
   something any integration can override. The dial itself works
   correctly (dragging it to "3" really does set mist level 3); it just
   displays as "3 %" instead of "Level 3". Cosmetic only.
@@ -122,8 +124,9 @@ humidifier card automatically.
   `unavailable` (e.g. the ESPHome device loses WiFi), this entity
   reflects that correctly, but has no extra diagnostics beyond what the
   underlying entities already report.
-- YAML only, no config flow / UI setup -- deliberately, to keep this
-  simple for a single device.
+- No options flow yet to change the entity mapping after initial setup
+  -- if you need to repoint it at different entities, remove the config
+  entry and add it again.
 
 ## Credit
 
