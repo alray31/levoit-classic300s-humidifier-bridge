@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Passerelle Humidificateur Levoit Classic 300S",
+        "description": "Les champs détectés automatiquement sur votre appareil sont déjà remplis ci-dessous -- confirmez ou choisissez une autre entité dans chaque menu déroulant.",
+        "data": {
+          "name": "Nom",
+          "power_switch": "Interrupteur d'alimentation (Power)",
+          "mode_select": "Sélecteur de mode (Auto/Sleep/Manual)",
+          "auto_target": "Humidité cible Auto (number)",
+          "sleep_target": "Humidité cible Sommeil (number)",
+          "manual_level": "Niveau de brume manuel (number)",
+          "current_humidity": "Capteur d'humidité actuelle (optionnel)"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Cet interrupteur d'alimentation est déjà relié par une autre configuration."
+    }
+  }
+}
