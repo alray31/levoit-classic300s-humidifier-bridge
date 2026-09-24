@@ -1,22 +1,20 @@
-"""Levoit Classic 300S humidifier bridge.
+"""Humidifier platform for the Levoit Classic 300S bridge.
 
 Wraps the entities already exposed by the ESPHome device (a select for
 mode, three numbers for auto/sleep target and manual level, and a power
 switch) into a single native Home Assistant `humidifier` entity -- so it
-shows up in Lovelace as one standard humidifier card with a power toggle,
-an Auto/Sleep/Manual mode dropdown, and a target dial, instead of several
-separate select/number/switch entities.
+shows up in Lovelace as one standard humidifier card with a power
+toggle, an Auto/Sleep/Manual mode dropdown, and a target dial, instead
+of several separate select/number/switch entities.
 
-This is a plain YAML platform (no config flow, nothing to set up in the
-UI) -- add it under a `humidifier:` block in configuration.yaml. See the
-README in this same folder for the exact YAML and how to find your real
-entity IDs.
+Configured entirely via the config flow (config_flow.py) -- no YAML.
 
 Not part of the ESPHome firmware: this runs entirely on the Home
 Assistant side and just orchestrates the existing entities the ESPHome
-device already exposes. It sends no commands of its own to the appliance
--- every action here is a plain `switch.turn_on`, `select.select_option`
-or `number.set_value` call on an entity that already exists.
+device already exposes. It sends no commands of its own to the
+appliance -- every action here is a plain `switch.turn_on`,
+`select.select_option` or `number.set_value` call on an entity that
+already exists.
 
 "Stop At Target" is deliberately NOT part of this entity: the humidifier
 domain only has room for on/off + one mode dropdown + one target dial,
@@ -34,69 +32,42 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import voluptuous as vol
-
-from homeassistant.components.humidifier import PLATFORM_SCHEMA, HumidifierEntity
+from homeassistant.components.humidifier import HumidifierEntity
 from homeassistant.components.humidifier.const import (
     HumidifierDeviceClass,
     HumidifierEntityFeature,
 )
-from homeassistant.const import CONF_NAME, CONF_UNIQUE_ID, STATE_ON
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_ON
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+
+from .const import (
+    AUTO_SLEEP_MAX_HUMIDITY,
+    AUTO_SLEEP_MIN_HUMIDITY,
+    AVAILABLE_MODES,
+    CONF_AUTO_TARGET,
+    CONF_CURRENT_HUMIDITY,
+    CONF_MANUAL_LEVEL,
+    CONF_MODE_SELECT,
+    CONF_POWER_SWITCH,
+    CONF_SLEEP_TARGET,
+    MANUAL_MAX_LEVEL,
+    MANUAL_MIN_LEVEL,
+    MODE_AUTO,
+    MODE_MANUAL,
+    MODE_SLEEP,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
-CONF_POWER_SWITCH = "power_switch"
-CONF_MODE_SELECT = "mode_select"
-CONF_AUTO_TARGET = "auto_target"
-CONF_SLEEP_TARGET = "sleep_target"
-CONF_MANUAL_LEVEL = "manual_level"
-CONF_CURRENT_HUMIDITY = "current_humidity"
 
-# Must match components/lv_classic300s_humidifier/select.py's MODE_OPTIONS
-# exactly -- these are the literal option strings the ESPHome select
-# entity uses, and conveniently they already line up with what the
-# humidifier domain expects for its mode dropdown, so no translation
-# table is needed either direction.
-MODE_AUTO = "auto"
-MODE_SLEEP = "sleep"
-MODE_MANUAL = "manual"
-AVAILABLE_MODES = [MODE_AUTO, MODE_SLEEP, MODE_MANUAL]
-
-# Must match components/lv_classic300s_humidifier/number.py's min/max/step
-# for auto_target_humidity / sleep_target_humidity (30-80, real %) and
-# manual_level (1-9, a mist level -- not a real humidity %).
-AUTO_SLEEP_MIN_HUMIDITY = 30
-AUTO_SLEEP_MAX_HUMIDITY = 80
-MANUAL_MIN_LEVEL = 1
-MANUAL_MAX_LEVEL = 9
-
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
-    {
-        vol.Required(CONF_POWER_SWITCH): cv.entity_id,
-        vol.Required(CONF_MODE_SELECT): cv.entity_id,
-        vol.Required(CONF_AUTO_TARGET): cv.entity_id,
-        vol.Required(CONF_SLEEP_TARGET): cv.entity_id,
-        vol.Required(CONF_MANUAL_LEVEL): cv.entity_id,
-        vol.Optional(CONF_CURRENT_HUMIDITY): cv.entity_id,
-        vol.Optional(CONF_NAME, default="Levoit Classic 300S"): cv.string,
-        vol.Optional(CONF_UNIQUE_ID): cv.string,
-    }
-)
-
-
-async def async_setup_platform(
-    hass: HomeAssistant,
-    config: ConfigType,
-    async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up the single bridged humidifier entity from YAML."""
-    async_add_entities([LevoitHumidifierBridge(config)])
+    """Set up the bridged humidifier entity from a config entry."""
+    async_add_entities([LevoitHumidifierBridge(entry)])
 
 
 class LevoitHumidifierBridge(HumidifierEntity):
@@ -113,17 +84,16 @@ class LevoitHumidifierBridge(HumidifierEntity):
     _attr_supported_features = HumidifierEntityFeature.MODES
     _attr_available_modes = AVAILABLE_MODES
 
-    def __init__(self, config: ConfigType) -> None:
-        self._power_switch: str = config[CONF_POWER_SWITCH]
-        self._mode_select: str = config[CONF_MODE_SELECT]
-        self._auto_target: str = config[CONF_AUTO_TARGET]
-        self._sleep_target: str = config[CONF_SLEEP_TARGET]
-        self._manual_level: str = config[CONF_MANUAL_LEVEL]
-        self._current_humidity_entity: str | None = config.get(CONF_CURRENT_HUMIDITY)
-        self._attr_name = config[CONF_NAME]
-        self._attr_unique_id = (
-            config.get(CONF_UNIQUE_ID) or f"levoit_humidifier_bridge_{self._power_switch}"
-        )
+    def __init__(self, entry: ConfigEntry) -> None:
+        data = entry.data
+        self._power_switch: str = data[CONF_POWER_SWITCH]
+        self._mode_select: str = data[CONF_MODE_SELECT]
+        self._auto_target: str = data[CONF_AUTO_TARGET]
+        self._sleep_target: str = data[CONF_SLEEP_TARGET]
+        self._manual_level: str = data[CONF_MANUAL_LEVEL]
+        self._current_humidity_entity: str | None = data.get(CONF_CURRENT_HUMIDITY)
+        self._attr_name = entry.title
+        self._attr_unique_id = entry.entry_id
 
     async def async_added_to_hass(self) -> None:
         """Re-publish our own state whenever any underlying entity changes."""

@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Levoit Classic 300S Humidifier Bridge",
+        "description": "Any field found automatically on your device is already filled in below -- just confirm or pick a different entity from each dropdown.",
+        "data": {
+          "name": "Name",
+          "power_switch": "Power switch",
+          "mode_select": "Mode select (Auto/Sleep/Manual)",
+          "auto_target": "Auto Target Humidity (number)",
+          "sleep_target": "Sleep Target Humidity (number)",
+          "manual_level": "Manual Mist Level (number)",
+          "current_humidity": "Current Humidity sensor (optional)"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This power switch is already bridged by another entry."
+    }
+  }
+}

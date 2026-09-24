@@ -1,10 +1,27 @@
-"""Levoit Classic 300S humidifier bridge.
+"""Levoit Classic 300S humidifier bridge integration.
 
-YAML-only integration, no config entries and no config flow: the actual
-entity is created by `humidifier.py` from a
-`humidifier: platform: levoit_humidifier_bridge` block in
-`configuration.yaml`. This file exists only so Home Assistant recognizes
-`levoit_humidifier_bridge` as a valid component package.
+Set up entirely through a config flow (Settings -> Devices & services ->
+Add integration -> "Levoit Classic 300S Humidifier Bridge") -- no YAML
+needed. See config_flow.py for the entity auto-detection logic and
+humidifier.py for the actual bridged entity.
 """
 
-DOMAIN = "levoit_humidifier_bridge"
+from __future__ import annotations
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+
+from .const import DOMAIN
+
+PLATFORMS = ["humidifier"]
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Levoit Classic 300S humidifier bridge from a config entry."""
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
